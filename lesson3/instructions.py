@@ -9,8 +9,10 @@ resp = client.responses.create(
         "Answer concisely and use bullet points when helpful."
     ),
     input="Explain what a virtual environment is.",
-    temperature=0.0
+    temperature=0.0,
     # temperature=0.9
+    max_output_tokens=90
 )
 
 print(resp.output_text)
+print("Usage:", resp.usage)
