@@ -7,5 +7,5 @@ load_dotenv()
 
 if __name__ == "__main__":
     # lesson2_runnables.main()
-    lesson3_messages.main()
-    # lesson3_streaming.main()
+    # lesson3_messages.main()
+    lesson3_streaming.main()
