@@ -28,6 +28,7 @@ for msg in messages:
         content = str(msg)
     print(f"{role}: {content}")
 
-# Invoke the chain with the two inputs
-result = chain.invoke({"topic": topic, "audience": audience})
-print(result.content)
+def main():
+    # Invoke the chain with the two inputs
+    result = chain.invoke({"topic": topic, "audience": audience})
+    print(result.content)

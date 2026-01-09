@@ -13,5 +13,6 @@ parser = StrOutputParser()
 
 chain = prompt | model | parser
 
-result = chain.invoke({"question": "What is RAG in one sentence?"})
-print(result)
+def main():
+    result = chain.invoke({"question": "What is RAG in one sentence?"})
+    print(result)
