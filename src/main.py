@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from langchain.lesson6_runnable_map import main
+from langchain.lesson7_structured_output_parser import main
 
 load_dotenv()
 
