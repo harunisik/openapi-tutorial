@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from langchain.lesson7_pydantic_output_parser import main
+from langchain.lesson8_memory import main
 
 load_dotenv()
 
