@@ -14,8 +14,14 @@ def get_definition(term: str) -> str:
     }
     return definitions.get(term.lower(), "Definition not found")
 
+@tool
+def get_current_time() -> str:
+    """Get the current time as a string."""
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S test")
+
 llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
-llm_with_tools = llm.bind_tools([get_definition])
+llm_with_tools = llm.bind_tools([get_current_time])
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", "Use tools when they help answer accurately."),
@@ -25,12 +31,14 @@ prompt = ChatPromptTemplate.from_messages([
 chain = prompt | llm_with_tools | StrOutputParser()
 
 def main():
-    response = llm_with_tools.invoke("What does RAG mean?")
+    response = llm_with_tools.invoke("What time is it?")
 
     if response.tool_calls:
         print("Invoking tool...")
+
         tool_call = response.tool_calls[0]
-        tool_result = get_definition.invoke(tool_call["args"])
+        tool_result = get_current_time.invoke(tool_call["args"])
+        print(f"Tool result: {tool_result}")
 
         tool_message = ToolMessage(
             content=tool_result,
