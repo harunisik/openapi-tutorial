@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from src.langchain.lesson11_embeddings import main
+from src.langchain.lesson11_chunking import main
 
 load_dotenv()
 
