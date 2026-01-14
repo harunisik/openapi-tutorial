@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from langchain.lesson9_tools import main
+from src.langchain.lesson11_embeddings import main
 
 load_dotenv()
 
