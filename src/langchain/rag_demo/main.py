@@ -63,3 +63,17 @@ if __name__ == "__main__":
 # Add a query-rewrite step before retrieval
 # Add memory summary to the RAG chain
 # Swap FAISS → Pinecone (code should barely change)
+
+# Optional exercises
+#
+# Implement query rewrite only when question length > N chars
+# Switch retriever to MMR and compare results
+# Add a simple in-memory cache for retrieval results
+# Measure latency breakdown (retrieve vs LLM)
+
+# Optional exercises
+#
+# Add a guard that rejects empty context
+# Log prompt + retrieved docs for one query
+# Enable LangSmith and inspect a trace
+# Simulate a broken document update and observe behavior
