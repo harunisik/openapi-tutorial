@@ -40,19 +40,30 @@ from langchain_core.tools import tool
 # 1) Tools
 # ----------------------------
 
+mock_db = {
+    "A100": {"order_id": "A100", "status": "SHIPPED", "eta_days": 2},
+    "B200": {"order_id": "B200", "status": "PROCESSING", "eta_days": 5},
+    "C300": {"order_id": "C300", "status": "DELIVERED", "eta_days": 0},
+}
+
 @tool
 def get_order_status(order_id: str) -> dict:
     """Look up an order status by order_id. Returns a JSON-like dict."""
     # Pretend this is a real API call / DB query
-    mock_db = {
-        "A100": {"order_id": "A100", "status": "SHIPPED", "eta_days": 2},
-        "B200": {"order_id": "B200", "status": "PROCESSING", "eta_days": 5},
-        "C300": {"order_id": "C300", "status": "DELIVERED", "eta_days": 0},
-    }
     return mock_db.get(order_id, {"order_id": order_id, "status": "NOT_FOUND", "eta_days": None})
 
+@tool
+def cancel_order(order_id: str) -> dict:
+    """Cancel an order by order_id. Returns a JSON-like dict."""
+    # Pretend this is a real API call / DB query
+    if order_id in mock_db:
+        current_status = mock_db[order_id]["status"]
+        mock_db[order_id]["status"] = "CANCELLED"
+        return {"order_id": order_id, "status": "CANCELLED", "previous_status": current_status}
+    else:
+        return {"order_id": order_id, "status": "NOT_FOUND"}
 
-TOOLS = {get_order_status.name: get_order_status}
+TOOLS = {get_order_status.name: get_order_status, cancel_order.name: cancel_order}
 
 
 # ----------------------------
@@ -60,7 +71,7 @@ TOOLS = {get_order_status.name: get_order_status}
 # ----------------------------
 
 class ToolCall(BaseModel):
-    name: Literal["get_order_status"]
+    name: Literal["get_order_status", "cancel_order"]
     arguments: str
 
 
@@ -149,6 +160,9 @@ def run_agent_turn(state: Dict[str, Any], user_input: str, *, max_steps: int = 4
             "user_input": user_input,
         })
 
+        print("\n--- Step", step_idx + 1, "---")
+        print(decision.action)
+
         if decision.action == "final":
             answer = decision.final_answer or "I’m not sure. Could you clarify?"
             state["messages"].append(AIMessage(content=answer))
@@ -160,6 +174,9 @@ def run_agent_turn(state: Dict[str, Any], user_input: str, *, max_steps: int = 4
             answer = "I couldn’t determine the right tool call. Which order ID should I check?"
             state["messages"].append(AIMessage(content=answer))
             return answer
+
+        print("Tool call:", decision.tool_call)
+        print("---------------")
 
         tool_name = decision.tool_call.name
         tool_args = decision.tool_call.arguments
