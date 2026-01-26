@@ -57,6 +57,19 @@ def search_catalog(query: str) -> List[dict]:
     return [p for p in CATALOG if q in p["name"].lower() or q in p["sku"].lower()]
 
 
+class GetProductDetailsInput(BaseModel):
+    sku: str = Field(..., description="Product SKU, e.g. 'MUG-042'")
+
+
+@tool(args_schema=GetProductDetailsInput)
+def get_product_details(sku: str) -> Optional[dict]:
+    """Get product details by SKU."""
+    for p in CATALOG:
+        if p["sku"] == sku:
+            return p
+    raise ValueError(f"SKU {sku} not found")
+
+
 class AddToCartInput(BaseModel):
     sku: str = Field(..., description="Product SKU, e.g. 'MUG-042'")
     qty: int = Field(..., ge=1, description="Quantity to add (>=1)")
@@ -88,7 +101,8 @@ SYSTEM = SystemMessage(
         "Use tools to search products and manage the cart.\n"
         "Rules:\n"
         "- If you need product info, call search_catalog.\n"
-        "- If user wants to add items, call add_to_cart (needs SKU + qty).\n"
+        "- If user wants product details, call get_product_details (needs SKU).\n"
+        "- If user wants to add items, confirm SKU and quantity, then call add_to_cart.\n"
         "- If user asks what's in the cart, call view_cart.\n"
         "- If you don't know the SKU, search first.\n"
         "Be concise and confirm actions.\n"
@@ -172,7 +186,7 @@ def chat_turn(
 
 def main():
     cart = CartStore()
-    tools = [search_catalog, make_add_to_cart_tool(cart), make_view_cart_tool(cart)]
+    tools = [search_catalog, make_add_to_cart_tool(cart), make_view_cart_tool(cart), get_product_details]
     tools_by_name = {t.name: t for t in tools}
     planner = build_planner(tools)
 
