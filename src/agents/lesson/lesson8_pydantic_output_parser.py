@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from src.agents.config import OPENAI_MODEL
+from src.config import OPENAI_MODEL
 from src.agents.prompts.agent import BASE_AGENT_SYSTEM_PROMPT, STRUCTURED_AGENT_SYSTEM_PROMPT
 
 model = ChatOpenAI(
