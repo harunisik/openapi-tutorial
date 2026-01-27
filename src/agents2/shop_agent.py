@@ -17,7 +17,7 @@ from langchain_core.messages import (
 )
 from langchain_core.runnables import RunnableLambda
 
-from src.config import OPENAI_MODEL
+from src.config import OPENAI_MODEL, SHOPAGENT_DEBUG
 
 
 # -----------------------------
@@ -132,18 +132,43 @@ def build_planner(tools):
 # -----------------------------
 def run_tool_calls(ai_message, tools_by_name: Dict[str, Any]) -> List[ToolMessage]:
     tool_messages: List[ToolMessage] = []
-    for call in getattr(ai_message, "tool_calls", []) or []:
+    calls = getattr(ai_message, "tool_calls", []) or []
+
+    trace("tool_calls.detected", {"count": len(calls), "calls": calls})
+
+    for call in calls:
         name = call["name"]
-        args = call.get("args", {})  # already parsed JSON
-        tool = tools_by_name[name]
+        args = call.get("args", {})
+        tool = tools_by_name.get(name)
+
+        if tool is None: # not present in available tools
+            # Model hallucinated an unknown tool name: return a recoverable observation.
+            content = f"TOOL_ERROR: UnknownTool: '{name}'. Available tools: {sorted(tools_by_name.keys())}"
+            tool_messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
+            continue
+
         try:
             obs = tool.invoke(args)
-            content = obs if isinstance(obs, str) else json.dumps(obs)
+
+            # Keep observations compact and predictable (avoid dumping huge dicts).
+            if isinstance(obs, (dict, list)):
+                content = json.dumps(obs, ensure_ascii=False)[:2000]
+            else:
+                content = str(obs)[:2000]
+
+            trace("tool_calls.executed", {"tool": name, "args": args, "obs_preview": content[:300]})
+
+        except ValueError as e:
+            # Treat input-validation-ish failures as recoverable: model can fix args and retry.
+            content = f"TOOL_ERROR: BadInput: {e}"
         except Exception as e:
-            # Give the model something actionable to recover with.
-            content = f"TOOL_ERROR: {type(e).__name__}: {e}"
+            # Unknown failures: still return as observation, but signal it may not be retryable.
+            content = f"TOOL_ERROR: ToolFailed: {type(e).__name__}: {e}"
+
         tool_messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
+
     return tool_messages
+
 
 
 # -----------------------------
@@ -163,25 +188,37 @@ def chat_turn(
     """
     messages = messages + [HumanMessage(content=user_text)]
 
-    for _ in range(max_steps):
+    for step in range(1, max_steps + 1):
+        trace("loop.step.start", {"step": step})
+
         ai = planner.invoke({"messages": messages})
         messages = messages + [ai]
 
-        if not getattr(ai, "tool_calls", None):
-            # final answer for this turn
+        calls = getattr(ai, "tool_calls", None)
+        if not calls:
+            trace("loop.step.stop", {"step": step, "reason": "no_tool_calls"})
             return messages
 
         tool_msgs = run_tool_calls(ai, tools_by_name)
         messages = messages + tool_msgs
 
-    # Safety fallback: if we hit max_steps, end the turn
+    trace("loop.step.stop", {"step": max_steps, "reason": "max_steps_reached"})
     messages = messages + [
         ToolMessage(
-            content="Max steps reached; stopping to avoid looping.",
+            content="Max steps reached; stopping to avoid looping. Please restate your request or try again.",
             tool_call_id="loop_guard",
         )
     ]
+
     return messages
+
+
+def trace(event: str, payload: dict | None = None) -> None:
+    if not SHOPAGENT_DEBUG:
+        return
+    print(f"[trace] {event}")
+    if payload:
+        print(json.dumps(payload, indent=2)[:2000])
 
 
 def main():
