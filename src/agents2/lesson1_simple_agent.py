@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import (
     AIMessage,
@@ -9,10 +9,13 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
 from src.config import OPENAI_MODEL
+
+SYSTEM = SystemMessage(content="You are a precise assistant. Use tools when needed.")
 
 
 # -------------------------
@@ -41,29 +44,14 @@ llm = ChatOpenAI(model=OPENAI_MODEL, temperature=0).bind_tools(TOOLS)
 # bind_tools enables native tool-calling, and tool calls appear on AIMessage.tool_calls :contentReference[oaicite:1]{index=1}
 
 
-# -------------------------
-# 3) State + loop primitives
-# -------------------------
-def _init_state(user_input: str) -> Dict[str, Any]:
-    # State is explicit and easy to persist/log
-    messages: List[BaseMessage] = [
-        SystemMessage(content="You are a precise assistant. Use tools when needed."),
-        HumanMessage(content=user_input),
-    ]
-    return {"messages": messages}
+def _plan(state: List[BaseMessage]) -> AIMessage:
+    """LLM step: decides next action (tool call) or returns AI message."""
+    ai: AIMessage = llm.invoke(state)
+    return ai
 
 
-def _plan(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LLM step: decides next action (tool call) or returns final answer."""
-    ai: AIMessage = llm.invoke(state["messages"])
-    return {"messages": state["messages"] + [ai]}
-
-
-def _execute_tools(state: Dict[str, Any]) -> Dict[str, Any]:
+def _execute_tools(last: AIMessage) -> List[ToolMessage]:
     """Executor step: run any tool calls from the last AIMessage and append ToolMessage observations."""
-    last = state["messages"][-1]
-    if not isinstance(last, AIMessage) or not last.tool_calls:
-        return state  # nothing to execute
 
     tool_messages: List[ToolMessage] = []
     for call in last.tool_calls:
@@ -77,7 +65,7 @@ def _execute_tools(state: Dict[str, Any]) -> Dict[str, Any]:
             tool_messages.append(
                 ToolMessage(
                     tool_call_id=call_id,
-                    content=f"ERROR: Unknown tool '{name}'. Available: {list(TOOL_BY_NAME)}",
+                    content=f"TOOL_ERROR: Unknown tool '{name}'. Available: {list(TOOL_BY_NAME)}",
                 )
             )
             continue
@@ -87,9 +75,9 @@ def _execute_tools(state: Dict[str, Any]) -> Dict[str, Any]:
             result = tool.invoke(args)
             tool_messages.append(ToolMessage(tool_call_id=call_id, content=str(result)))
         except Exception as e:
-            tool_messages.append(ToolMessage(tool_call_id=call_id, content=f"ERROR: {e!r}"))
+            tool_messages.append(ToolMessage(tool_call_id=call_id, content=f"TOOL_ERROR: {e!r}"))
 
-    return {"messages": state["messages"] + tool_messages}
+    return tool_messages
 
 
 def _should_continue(state: Dict[str, Any]) -> bool:
@@ -98,34 +86,42 @@ def _should_continue(state: Dict[str, Any]) -> bool:
     return isinstance(last, AIMessage) and bool(last.tool_calls)
 
 
-def run_agent(user_input: str, *, max_steps: int = 8) -> AIMessage:
+def run_agent(user_input: str, *, max_steps: int = 5) -> list[BaseMessage] | None:
     """
     Minimal agent loop:
     - PLAN: model proposes tool calls or final answer
     - EXECUTE: run tool calls, append ToolMessage observations
     - repeat until final answer or step limit
     """
-    state = _init_state(user_input)
+    state: List[BaseMessage] = [SYSTEM, HumanMessage(content=user_input)]
 
     for _ in range(max_steps):
-        state = _plan(state)
-        if not _should_continue(state):
-            break
-        state = _execute_tools(state)
+        ai = _plan(state)
+        state.append(ai)
 
-    last = state["messages"][-1]
-    if not isinstance(last, AIMessage):
-        # If we ended on ToolMessage, do one last planning step for a final answer
-        state = _plan(state)
-        last = state["messages"][-1]
+        # Stop if last AIMessage has no tool calls
+        if not ai.tool_calls:
+            return state
 
-    assert isinstance(last, AIMessage)
-    return last
+        observation = _execute_tools(ai)
+        state.extend(observation)
 
+    state.append(
+        ToolMessage(
+            content="Max steps reached; stopping to avoid looping. Please restate your request or try again.",
+            tool_call_id="loop_guard",
+        )
+    )
+
+    return state
 
 # -------------------------
 # 4) Demo
 # -------------------------
 def main() -> None:
-    final = run_agent("Compute (7 * 9) + 10. Use tools.")
-    print(final.content)
+    user_input = "Compute (7 * 9) + 10. Use tools."
+
+    final = run_agent(user_input)
+    # last AI message is typically the final answer
+    last: Optional[BaseMessage] = final[-1]
+    print(last.content)
