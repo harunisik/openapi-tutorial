@@ -12,7 +12,7 @@ from ingest import ingest_documents
 
 load_dotenv()
 
-LANGUAGE_MODEL_NAME = os.getenv("LANGUAGE_MODEL_NAME")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL")
 
 document = read_document("data/Identifier+Descriptions.txt")
 vectorstore = ingest_documents([document])
@@ -31,7 +31,7 @@ inputs = RunnableMap({
                 | format_docs),
 })
 llm = ChatOpenAI(
-    model=LANGUAGE_MODEL_NAME,
+    model=OPENAI_MODEL,
     temperature=0,
     max_tokens=100
 )
